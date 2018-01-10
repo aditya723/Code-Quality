@@ -19,3 +19,30 @@ Signal handlers and spawned processes run at the privilege of the owning process
 when a signal fires or a sub-process is executed, the signal handler or sub-process will operate with root privileges.
 An attacker may be able to leverage these elevated privileges to do further damage.
 
+Format string attack
+---------------------------------
+The Format String exploit occurs when the submitted data of an input string is evaluated as a command by the application.
+In this way, the attacker could execute code, read the stack, or cause a segmentation fault in the running application,
+causing new behaviors that could compromise the security or the stability of the system.
+
+To understand the attack, it’s necessary to understand the components that constitute it.
+
+•The Format Function is an ANSI C conversion function, like printf, fprintf, which converts a primitive variable of the
+programming language into a human-readable string representation.
+
+•The Format String is the argument of the Format Function and is an ASCII Z string which contains text and format parameters,
+like: printf ("The magic number is: %d\n", 1911);
+
+•The Format String Parameter, like %x %s defines the type of conversion of the format function.
+
+The attack could be executed when the application doesn’t properly validate the submitted input. In this case, if a Format
+String parameter, like %x, is inserted into the posted data, the string is parsed by the Format Function, and the conversion
+specified in the parameters is executed. However, the Format Function is expecting more arguments as input, and if these
+arguments are not supplied, the function could read or write the stack. 
+
+userName is a command line argument.
+printf (userName);
+The attacker could insert a sequence of format strings, making the program show the memory address where a lot of other
+data are stored, then, the attacker increases the possibility that the program will read an illegal address, crashing
+the program and causing its non-availability.
+printf (%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s);
