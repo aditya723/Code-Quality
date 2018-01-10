@@ -1,2 +1,2 @@
 # Code-Quality
-Points needs to be taken care when writing a system software
+Points need to be taken care when writing a system software
