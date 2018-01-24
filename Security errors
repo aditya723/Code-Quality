@@ -1,20 +1,13 @@
 Often Misused: Privilege Management
 ----------------------------------------------------
 
-
-Abstract
-Failure to adhere to the principle of least privilege amplifies the risk posed by other vulnerabilities.
-Explanation
 Programs that run with root privileges have caused innumerable Unix security disasters. It is imperative
 that you carefully review privileged programs for all kinds of security problems, but it is equally important
 that privileged programs drop back to an unprivileged state as quickly as possible in order to limit the amount
 of damage that an overlooked vulnerability might be able to cause.
-
-
 Privilege management functions can behave in some less-than-obvious ways, and they have different quirks on
 different platforms. These inconsistencies are particularly pronounced if you are transitioning from one
 non-root user to another.
-
 Signal handlers and spawned processes run at the privilege of the owning process, so if a process is running as root
 when a signal fires or a sub-process is executed, the signal handler or sub-process will operate with root privileges.
 An attacker may be able to leverage these elevated privileges to do further damage.
@@ -24,17 +17,12 @@ Format string attack
 The Format String exploit occurs when the submitted data of an input string is evaluated as a command by the application.
 In this way, the attacker could execute code, read the stack, or cause a segmentation fault in the running application,
 causing new behaviors that could compromise the security or the stability of the system.
-
 To understand the attack, it’s necessary to understand the components that constitute it.
-
 •The Format Function is an ANSI C conversion function, like printf, fprintf, which converts a primitive variable of the
 programming language into a human-readable string representation.
-
 •The Format String is the argument of the Format Function and is an ASCII Z string which contains text and format parameters,
 like: printf ("The magic number is: %d\n", 1911);
-
 •The Format String Parameter, like %x %s defines the type of conversion of the format function.
-
 The attack could be executed when the application doesn’t properly validate the submitted input. In this case, if a Format
 String parameter, like %x, is inserted into the posted data, the string is parsed by the Format Function, and the conversion
 specified in the parameters is executed. However, the Format Function is expecting more arguments as input, and if these
@@ -46,3 +34,243 @@ The attacker could insert a sequence of format strings, making the program show 
 data are stored, then, the attacker increases the possibility that the program will read an illegal address, crashing
 the program and causing its non-availability.
 printf (%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s);
+
+
+
+Buffer Overflow: Off-by-One
+----------------------------------
+The program writes just past the bounds of allocated memory, which could corrupt data, crash the program,
+or lead to the execution of malicious code.
+There are a number of excellent books that provide detailed information on how buffer overflow attacks work,
+including Building Secure Software [1], Writing Secure Code [2], and The Shellcoder's Handbook [3].
+
+
+Double Free
+--------------
+Calling free() twice on the same memory address can lead to a buffer overflow.
+Explanation
+Calling free() twice on the same value can lead to a buffer overflow. When a program calls free() twice with
+the same argument, the program's memory management data structures become corrupted. This corruption can
+cause the program to crash or, in some circumstances, cause two later calls to malloc() to return the
+same pointer. If malloc() returns the same value twice and the program later gives the attacker control
+over the data that is written into this doubly-allocated memory, the program becomes vulnerable to a buffer
+overflow attack.
+
+Integer Overflow
+-------------------
+Not accounting for integer overflow can result in logic errors or buffer overflow.
+
+
+Memory Leak
+----------------
+Memory is allocated but never freed.
+
+Missing Check against Null
+-----------------------------
+The program can dereference a null pointer because it does not check the return value of a function that might return null.
+
+  buf = (char*) malloc(req_size);
+  strncpy(buf, xfer, req_size);
+
+- Depending upon the type and size of the application, it may be possible to free memory that is being used elsewhere so
+that execution can continue.
+- It is impossible for the program to perform a graceful exit if required. If the program is performing an atomic operation,
+it can leave the system in an inconsistent state.
+- The programmer has lost the opportunity to record diagnostic information. Did the call to malloc() fail because
+req_size was too large or because there were too many requests being handled at the same time? Or was it caused by a
+memory leak that has built up over time? Without handling the error, there is no way to know.
+
+Null Dereference
+------------------
+ There are at least three flavors of this problem: check-after-dereference, dereference-after-check, and
+ dereference-after-store. A check-after-dereference error occurs when a program dereferences a pointer that can be null
+ before checking if the pointer is null. Dereference-after-check errors occur when a program makes an explicit check for
+ null, but proceeds to dereference the pointer when it is known to be null. Errors of this type are often the result of a
+ typo or programmer oversight. A dereference-after-store error occurs when a program explicitly sets a pointer to null and
+ dereferences it later. This error is often the result of a programmer initializing a variable to null when it is declared.
+ 
+ Race Condition: Signal Handling
+ ------------------------------------
+ Signal handling race conditions can occur whenever a function installed as a signal handler is non-reentrant, which means it
+ maintains some internal state or calls another function that does so. Such race conditions are even more likely when the
+ same function is installed to handle multiple signals.
+  The following code installs the same simple, non-reentrant signal handler for two different signals. If an attacker causes
+  signals to be sent at the right moments, the signal handler will experience a double free vulnerability. Calling free()
+  twice on the same value can lead to a buffer overflow. When a program calls free() twice with the same argument, the
+  program's memory management data structures become corrupted. This corruption can cause the program to crash or, in
+  some circumstances, cause two later calls to malloc() to return the same pointer. If malloc() returns the same value
+  twice and the program later gives the attacker control over the data that is written into this doubly-allocated memory,
+  the program becomes vulnerable to a buffer overflow attack.
+  void sh(int dummy) {
+  ...
+  free(global2);
+  free(global1);
+  ...
+}
+
+int main(int argc,char* argv[]) {
+  ...
+  signal(SIGHUP,sh);
+  signal(SIGTERM,sh);
+  ...
+}
+
+
+Unreleased Resource
+------------------------
+The program fails to release a lock it holds, which might lead to deadlock.
+Resource leaks have at least two common causes:
+- Error conditions and other exceptional circumstances.
+- Confusion over which part of the program is responsible for releasing the resource.
+Most unreleased resource issues result in general software reliability problems, but if an attacker can intentionally trigger
+a resource leak, the attacker may be able to launch a denial of service by depleting the resource pool.
+
+Use After Free
+-------------------
+
+Dangerous Function: strcpy()
+-----------------------------------
+
+Unchecked Return Value
+----------------------------
+Ignoring a method's return value can cause the program to overlook unexpected states and conditions.
+char buf[10], cp_buf[10];
+fgets(buf, 10, stdin);
+strcpy(cp_buf, buf);
+
+The programmer expects that when fgets() returns, buf will contain a null-terminated string of length 9 or less.
+But if an I/O error occurs, fgets() will not null-terminate buf. Furthermore, if the end of the file is reached
+before any characters are read, fgets() returns without writing anything to buf. In both of these situations,
+fgets() signals that something unusual has happened by returning NULL, but in this code, the warning will not be
+noticed. The lack of a null terminator in buf can result in a buffer overflow in the subsequent call to strcpy().
+
+Path Manipulation
+---------------------
+Path manipulation errors occur when the following two conditions are met:
+1. An attacker is able to specify a path used in an operation on the file system.
+2. By specifying the resource, the attacker gains a capability that would not otherwise be permitted.
+For example, the program may give the attacker the ability to overwrite the specified file or run with a
+configuration controlled by the attacker.
+
+Revealing system data or debugging information helps an adversary learn about the system and form a plan of attack.
+---------------------------------------------------------------------------------------------------------------------
+An internal information leak occurs when system data or debugging information is sent via logging or printing to a local file,
+console, or screen.
+if (!fileInput.Open(PATH, CFile::modeRead, &ex)) {
+    ex.ReportError();
+} else {
+    fileInput.Close();
+}
+Depending upon the system configuration, this information can be dumped to a console, written to a log file, or exposed to a
+user. In some cases the error message tells the attacker precisely what sort of an attack the system is vulnerable to. For
+example, a database error message can reveal that the application is vulnerable to a SQL injection attack. Other error messages
+can reveal more oblique clues about the system. In the example above, the search path could imply information about the type of
+operating system, the applications installed on the system, and the amount of care that the administrators have put into
+configuring the program.
+
+Type Mismatch: Negative to Unsigned
+----------------------------------------
+
+Process Control
+------------------
+Loading a library without specifying an absolute path can result in the program using a malicious library
+supplied by an attacker.
+Process control vulnerabilities take two forms:
+- An attacker can change the name of the library that the program executes: the attacker explicitly controls what the library
+name is.
+- An attacker can change the environment in which the library is loaded: the attacker implicitly controls what the library name
+means.
+In this case we are primarily concerned with the second scenario, the possibility that an attacker may be able to control the
+environment in such a way that the program loads a malicious version of the named library.
+
+Process control vulnerabilities of this type occur when:
+1. An attacker provides a malicious library to an application.
+2. The application loads the malicious library because it fails to specify an absolute path or verify the file being loaded.
+3. By executing code from the library, the application gives the attacker a privilege or capability that the attacker would not
+otherwise have.
+
+String Termination Error
+--------------------------
+String termination errors caused by truncation occur when:
+1. Data enters a program.
+2. The data passes through a function that truncates it, removing the null terminator.
+3. The data is passed to a function that requires its input to be null terminated.
+Example 1: The following code retrieves the value of a null-terminated environment variable and uses strncpy() to copy the data
+into new. Later, the program incorrectly assumes new will always be null terminated when it is passed to setenv().
+...
+char *value = getenv("PWD");
+...
+char *new_value = strncpy(new, value, strlen(value));
+setenv("PATH", new, 1);
+...
+
+Code Correctness: Premature Thread Termination
+-----------------------------------------------
+If a parent process finishes execution normally before the threads it has spawned, the threads can be terminated prematurely.
+
+Command Injection
+---------------------
+Command injection vulnerabilities take two forms:
+- An attacker can change the command that the program executes: the attacker explicitly controls what the command is.
+- An attacker can change the environment in which the command executes: the attacker implicitly controls what the command means.
+In this case we are primarily concerned with the second scenario, in which an attacker can change the meaning of the command by
+changing an environment variable or by inserting a malicious executable early on the search path. Command injection
+vulnerabilities of this type occur when:
+
+1. An attacker modifies an application's environment.
+2. The application executes a command without specifying an absolute path or verifying the binary being executed.
+3. By executing the command, the application gives an attacker a privilege or capability that the attacker would not otherwise
+have.
+
+
+Dead Code
+-----------
+
+Heap Inspection
+--------------------
+Do not use realloc() to resize buffers that store sensitive information. The function might leave a copy of the sensitive
+information stranded in memory where it cannot be overwritten.
+Heap inspection vulnerabilities occur when sensitive data, such as a password or an encryption key, can be exposed to an
+attacker because they are not removed from memory.
+
+Insecure Compiler Optimization
+-------------------------------
+Improperly scrubbing sensitive data from memory can compromise security.
+Compiler optimization errors occur when:
+1. Secret data is stored in memory.
+2. The secret data is scrubbed from memory by overwriting its contents.
+3. The source code is compiled using an optimizing compiler, which
+identifies and removes the function that overwrites the contents as a dead store because the memory is not used subsequently.
+
+Example: The following code reads a password from the user, uses the password to connect to a back-end mainframe and then attempts
+to scrub the password from memory using memset().
+  void GetData(char *MFAddr) {
+  char pwd[64];
+  if (GetPasswordFromUser(pwd, sizeof(pwd))) {
+   if (ConnectToMainframe(MFAddr, pwd)) {
+		 // Interaction with mainframe
+	 }
+  }
+  memset(pwd, 0, sizeof(pwd));
+}
+
+Insecure Randomness
+-----------------------
+Standard pseudorandom number generators cannot withstand cryptographic attacks.
+Insecure randomness errors occur when a function that can produce predictable values is used as a source of randomness in a
+security-sensitive context.
+
+Poor Style: Redundant Initialization
+--------------------------------------
+
+Poor Style: Value Never Read
+------------------------------
+
+Portability Flaw
+------------------
+Functions with inconsistent implementations across operating systems and operating system versions cause portability problems.
+The behavior of functions in this category varies by operating system, and at times, even by operating system version. 
+Implementation differences can include:
+- Slight differences in the way parameters are interpreted leading to inconsistent results.
+- Some implementations of the function carry significant security risks.
+- The function might not be defined on all platforms.
